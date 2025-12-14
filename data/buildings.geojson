@@ -1,0 +1,15 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "id":"RAM-001", "name":"مبنى تجريبي 1", "year":"1925", "style":"حجر", "status":"قائم", "story":"وصف قصير..." },
+      "geometry": { "type":"Point", "coordinates":[35.2034, 31.9038] }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id":"RAM-002", "name":"مبنى تجريبي 2", "year":"1935", "style":"قناطر", "status":"مهدد", "story":"وصف قصير..." },
+      "geometry": { "type":"Point", "coordinates":[35.2060, 31.9052] }
+    }
+  ]
+}

@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ذاكرة الحجر | خريطة تفاعلية</title>
+
+  <!-- Font (Google) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+
+  <link rel="stylesheet" href="./css/style.css" />
+</head>
+<body>
+
+  <!-- Intro / Landing -->
+  <main id="intro" class="intro">
+    <div class="intro__bg" aria-hidden="true"></div>
+
+    <section class="intro__card" aria-label="واجهة ترحيبية">
+      <div class="intro__badge">مشروع توثيق تراثي باستخدام GIS</div>
+      <h1 class="intro__title">ذاكرة الحجر</h1>
+      <p class="intro__subtitle">
+        المدينة ليست مجرد شوارع ومبانٍ… بل طبقات من الحياة، الذاكرة، والتحولات.
+      </p>
+
+      <div class="intro__grid">
+        <article class="mini">
+          <div class="mini__icon">🧱</div>
+          <div class="mini__txt">
+            <h3>المبنى</h3>
+            <p>كل مبنى تاريخي شاهدٌ صامت على حياة عاشت داخله.</p>
+          </div>
+        </article>
+
+        <article class="mini">
+          <div class="mini__icon">🗺️</div>
+          <div class="mini__txt">
+            <h3>الخريطة</h3>
+            <p>نربط الموقع بقصته، لا نكتفي بعرض النقاط.</p>
+          </div>
+        </article>
+
+        <article class="mini">
+          <div class="mini__icon">🧠</div>
+          <div class="mini__txt">
+            <h3>الذاكرة</h3>
+            <p>توثيق بصري/رقمي لمواجهة النسيان والتحوّل السريع.</p>
+          </div>
+        </article>
+      </div>
+
+      <div class="intro__actions">
+        <button id="btnEnter" class="btn btn--primary">ابدأ الرحلة</button>
+        <button id="btnAbout" class="btn btn--ghost">عن المشروع</button>
+      </div>
+
+      <p class="intro__footnote">
+        *يمكنك تعديل المحتوى والصور والبيانات لاحقًا بسهولة.
+      </p>
+    </section>
+  </main>
+
+  <!-- About modal -->
+  <dialog id="aboutDialog" class="dialog">
+    <div class="dialog__header">
+      <h2>عن المشروع</h2>
+      <button id="btnCloseAbout" class="iconbtn" aria-label="إغلاق">✕</button>
+    </div>
+    <div class="dialog__body">
+      <p>
+        هذا النموذج يعرض واجهة دخول “سردية” قبل الخريطة، ثم ينتقل إلى خريطة تفاعلية
+        تعرض مباني تاريخية مع معلومات وصور وروابط. يمكنك استبدال GeoJSON ببياناتك
+        الفعلية وإضافة طبقات زمنية لاحقًا.
+      </p>
+      <ul>
+        <li>واجهة افتتاحية فخمة + انتقال سلس</li>
+        <li>خريطة Leaflet + طبقة GeoJSON</li>
+        <li>لوحة جانبية (Side Panel) بدل Popup التقليدي</li>
+      </ul>
+    </div>
+  </dialog>
+
+  <!-- App shell -->
+  <div id="app" class="app is-hidden">
+    <header class="topbar">
+      <div class="topbar__brand">
+        <span class="dot"></span>
+        <span>ذاكرة الحجر</span>
+      </div>
+
+      <div class="topbar__actions">
+        <button id="btnTour" class="btn btn--primary btn--sm">الجولة</button>
+        <button id="btnHome" class="btn btn--ghost btn--sm">الواجهة</button>
+        <button id="btnLegend" class="btn btn--ghost btn--sm">الأسطورة</button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside id="panel" class="panel" aria-label="معلومات المبنى">
+        <div class="panel__empty">
+          <h2>استكشف الخريطة</h2>
+          <p>اضغط على أي مبنى لعرض التفاصيل هنا.</p>
+        </div>
+      </aside>
+
+      <section class="mapWrap">
+        <div id="map" class="map" role="application" aria-label="الخريطة التفاعلية"></div>
+
+        <div id="legend" class="legend is-hidden">
+          <div class="legend__title">الأسطورة</div>
+          <div class="legend__row"><span class="swatch swatch--a"></span> مبنى تاريخي</div>
+          <div class="legend__row"><span class="swatch swatch--b"></span> نقطة تجريبية</div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <!-- Leaflet MarkerCluster JS -->
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+  <script src="./js/app.js"></script>
+</body>
+</html>
