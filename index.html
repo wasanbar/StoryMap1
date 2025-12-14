@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ذاكرة الحجر | خريطة تفاعلية</title>
+  <title>ذاكرة الحجر | متحف خريطة تفاعلية</title>
 
-  <!-- Font (Google) -->
+  <!-- Font -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
@@ -14,11 +14,12 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 
+  <!-- App CSS -->
   <link rel="stylesheet" href="./css/style.css" />
 </head>
 <body>
 
-  <!-- Intro / Landing -->
+  <!-- Intro -->
   <main id="intro" class="intro">
     <div class="intro__bg" aria-hidden="true"></div>
 
@@ -26,31 +27,31 @@
       <div class="intro__badge">مشروع توثيق تراثي باستخدام GIS</div>
       <h1 class="intro__title">ذاكرة الحجر</h1>
       <p class="intro__subtitle">
-        المدينة ليست مجرد شوارع ومبانٍ… بل طبقات من الحياة، الذاكرة، والتحولات.
+        ادخلي جولة تفاعلية داخل تاريخ المباني… صور، قصص، وفترات زمنية، كأنك داخل متحف.
       </p>
 
       <div class="intro__grid">
         <article class="mini">
-          <div class="mini__icon">🧱</div>
+          <div class="mini__icon">🏛️</div>
           <div class="mini__txt">
-            <h3>المبنى</h3>
-            <p>كل مبنى تاريخي شاهدٌ صامت على حياة عاشت داخله.</p>
+            <h3>متحف رقمي</h3>
+            <p>سرد بصري/صوتي يجعل السائح يستمتع بالتاريخ افتراضيًا.</p>
           </div>
         </article>
 
         <article class="mini">
           <div class="mini__icon">🗺️</div>
           <div class="mini__txt">
-            <h3>الخريطة</h3>
-            <p>نربط الموقع بقصته، لا نكتفي بعرض النقاط.</p>
+            <h3>خريطة + مسار</h3>
+            <p>مسار مشي مقترح وجولة تلقائية بين المحطات.</p>
           </div>
         </article>
 
         <article class="mini">
-          <div class="mini__icon">🧠</div>
+          <div class="mini__icon">⏳</div>
           <div class="mini__txt">
-            <h3>الذاكرة</h3>
-            <p>توثيق بصري/رقمي لمواجهة النسيان والتحوّل السريع.</p>
+            <h3>Timeline</h3>
+            <p>تصفّح المباني حسب العصور والفترات.</p>
           </div>
         </article>
       </div>
@@ -61,7 +62,7 @@
       </div>
 
       <p class="intro__footnote">
-        *يمكنك تعديل المحتوى والصور والبيانات لاحقًا بسهولة.
+        * كل شيء قابل للتعديل: الصور/القصص/البيانات من ملف GeoJSON.
       </p>
     </section>
   </main>
@@ -74,15 +75,15 @@
     </div>
     <div class="dialog__body">
       <p>
-        هذا النموذج يعرض واجهة دخول “سردية” قبل الخريطة، ثم ينتقل إلى خريطة تفاعلية
-        تعرض مباني تاريخية مع معلومات وصور وروابط. يمكنك استبدال GeoJSON ببياناتك
-        الفعلية وإضافة طبقات زمنية لاحقًا.
+        “ذاكرة الحجر” يحول خريطة GIS إلى تجربة متحفية: جولة تفاعلية، خط زمني، صور قبل/بعد، معرض، وصوت مرشد.
       </p>
       <ul>
-        <li>واجهة افتتاحية فخمة + انتقال سلس</li>
-        <li>خريطة Leaflet + طبقة GeoJSON</li>
-        <li>لوحة جانبية (Side Panel) بدل Popup التقليدي</li>
+        <li>Tour Player (التالي/السابق/إيقاف)</li>
+        <li>Timeline للعصور</li>
+        <li>Before/After + Gallery + Audio</li>
+        <li>Walking Route (مسار مشي)</li>
       </ul>
+      <p class="smallNote">ملاحظة: لعرض الصور/الصوت أضيفي روابطها في GeoJSON.</p>
     </div>
   </dialog>
 
@@ -96,6 +97,7 @@
 
       <div class="topbar__actions">
         <button id="btnTour" class="btn btn--primary btn--sm">الجولة</button>
+        <button id="btnRoute" class="btn btn--ghost btn--sm">المسار</button>
         <button id="btnHome" class="btn btn--ghost btn--sm">الواجهة</button>
         <button id="btnLegend" class="btn btn--ghost btn--sm">الأسطورة</button>
       </div>
@@ -104,8 +106,8 @@
     <div class="layout">
       <aside id="panel" class="panel" aria-label="معلومات المبنى">
         <div class="panel__empty">
-          <h2>استكشف الخريطة</h2>
-          <p>اضغط على أي مبنى لعرض التفاصيل هنا.</p>
+          <h2>استكشف المتحف</h2>
+          <p>اضغط على أي مبنى أو ابدأ الجولة.</p>
         </div>
       </aside>
 
@@ -115,8 +117,38 @@
         <div id="legend" class="legend is-hidden">
           <div class="legend__title">الأسطورة</div>
           <div class="legend__row"><span class="swatch swatch--a"></span> مبنى تاريخي</div>
-          <div class="legend__row"><span class="swatch swatch--b"></span> نقطة تجريبية</div>
+          <div class="legend__row"><span class="swatch swatch--danger"></span> مهدد</div>
+          <div class="legend__row"><span class="swatch swatch--restored"></span> مرمم</div>
+          <div class="legend__row"><span class="swatch swatch--route"></span> مسار الجولة</div>
         </div>
+
+        <!-- Tour Overlay (متحف/مشغل) -->
+        <div id="tourOverlay" class="tour is-hidden" aria-label="مشغل الجولة">
+          <div class="tour__head">
+            <div class="tour__title">الجولة السياحية</div>
+            <button id="btnCloseTour" class="iconbtn">✕</button>
+          </div>
+
+          <div class="tour__progress">
+            <div id="tourBar" class="tour__bar"></div>
+          </div>
+
+          <div class="tour__body">
+            <div class="tour__meta">
+              <span class="pill" id="tourCounter">—</span>
+              <span class="pill" id="tourEra">—</span>
+            </div>
+            <div class="tour__bigTitle" id="tourName">—</div>
+            <div class="tour__text" id="tourStory">—</div>
+          </div>
+
+          <div class="tour__actions">
+            <button id="btnPrev" class="btn btn--ghost btn--sm">السابق</button>
+            <button id="btnNext" class="btn btn--ghost btn--sm">التالي</button>
+            <button id="btnPlay" class="btn btn--primary btn--sm">تشغيل</button>
+          </div>
+        </div>
+
       </section>
     </div>
   </div>
@@ -125,9 +157,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
-  <!-- Leaflet MarkerCluster JS -->
-  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-
+  <!-- App JS -->
   <script src="./js/app.js"></script>
 </body>
 </html>
