@@ -1,55 +1,65 @@
 // ===== عناصر الواجهة =====
 const intro = document.getElementById("intro");
 const app = document.getElementById("app");
+
 const btnEnter = document.getElementById("btnEnter");
 const btnHome = document.getElementById("btnHome");
 const btnLegend = document.getElementById("btnLegend");
 const legend = document.getElementById("legend");
 const panel = document.getElementById("panel");
 
-// About dialog
 const btnAbout = document.getElementById("btnAbout");
 const aboutDialog = document.getElementById("aboutDialog");
 const btnCloseAbout = document.getElementById("btnCloseAbout");
 
-// Tour
 const btnTour = document.getElementById("btnTour");
+const btnRoute = document.getElementById("btnRoute");
 
+// Tour overlay controls
+const tourOverlay = document.getElementById("tourOverlay");
+const btnCloseTour = document.getElementById("btnCloseTour");
+const btnPrev = document.getElementById("btnPrev");
+const btnNext = document.getElementById("btnNext");
+const btnPlay = document.getElementById("btnPlay");
+
+const tourBar = document.getElementById("tourBar");
+const tourCounter = document.getElementById("tourCounter");
+const tourEra = document.getElementById("tourEra");
+const tourName = document.getElementById("tourName");
+const tourStory = document.getElementById("tourStory");
+
+// ===== حالة التطبيق =====
 let mapInitialized = false;
 let map;
 
-// Layers
-let geoLayer;                 // طبقة GeoJSON
-let clusterLayer;             // MarkerClusterGroup (اختياري)
+let geoLayer;
+let routeLine;
 
-// Data + indexes
-let buildingsData = [];       // نخزن features هنا
-let markerIndex = new Map();  // key -> layer (للتحديد/الهايلايت)
-let highlighted;              // آخر نقطة تم إبرازها
+let buildingsData = [];
+let markerIndex = new Map();
+let highlighted = null;
 
-// UI state
+// Filters
 let currentQuery = "";
-let currentStatus = "all";
-let currentStyle = "all";
+let currentEra = "all";
 let currentSort = "name";
-let yearMaxSelected = null;   // slider max (<=)
 let yearMin = null;
 let yearMax = null;
+let yearMaxSelected = null;
 
-let tourTimer = null;
+// Tour
+let tourList = [];
 let tourIndex = 0;
+let tourTimer = null;
+let tourPlaying = false;
 
-// ===== أدوات مساعدة =====
-function debounce(fn, delay = 180) {
-  let t;
-  return (...args) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...args), delay);
-  };
-}
+// Audio narrator (optional)
+let narrator = new Audio();
+narrator.preload = "metadata";
 
+// ===== مساعدات =====
 function escapeHtml(str) {
-  return String(str)
+  return String(str ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
@@ -57,35 +67,41 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
-// ===== مفتاح موحّد لكل feature =====
+function debounce(fn, delay = 160) {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), delay);
+  };
+}
+
 function getFeatureKey(feature) {
   const p = feature?.properties || {};
-  // prefer stable unique id, else name+coords
   const coords = feature?.geometry?.coordinates || [];
-  return String(
-    p.id ||
-    p.slug ||
-    p.name ||
-    `${coords[0] || ""},${coords[1] || ""}`
-  );
+  return String(p.id || p.slug || p.name || `${coords[0] || ""},${coords[1] || ""}`);
 }
 
 function getYear(feature) {
-  const y = feature?.properties?.year;
-  const n = Number(y);
-  return Number.isFinite(n) ? n : null;
+  const y = Number(feature?.properties?.year);
+  return Number.isFinite(y) ? y : null;
+}
+
+function getEra(feature) {
+  const e = String(feature?.properties?.era || "").trim();
+  return e || "غير محدد";
 }
 
 function getStatus(feature) {
-  return String(feature?.properties?.status || "").trim() || "غير محدد";
+  const s = String(feature?.properties?.status || "").trim();
+  return s || "غير محدد";
 }
 
 function getStyle(feature) {
-  return String(feature?.properties?.style || "").trim() || "غير محدد";
+  const s = String(feature?.properties?.style || "").trim();
+  return s || "غير محدد";
 }
 
 function parseUrlSelection() {
-  // supports: ?id=... or #id=...
   const url = new URL(window.location.href);
   const qid = url.searchParams.get("id");
   const hid = (window.location.hash || "").replace("#", "").trim();
@@ -99,6 +115,12 @@ function setUrlSelection(id) {
   window.history.replaceState({}, "", url.toString());
 }
 
+function latlngFromFeature(feature) {
+  const coords = feature?.geometry?.coordinates;
+  if (!coords || coords.length < 2) return null;
+  return [coords[1], coords[0]];
+}
+
 // ===== أزرار الواجهة =====
 btnEnter?.addEventListener("click", () => {
   intro.classList.add("is-hidden");
@@ -107,35 +129,20 @@ btnEnter?.addEventListener("click", () => {
 });
 
 btnHome?.addEventListener("click", () => {
-  app.classList.add("is-hidden");
-  intro.classList.remove("is-hidden");
   stopTour();
+  hideTourOverlay();
+  intro.classList.remove("is-hidden");
+  app.classList.add("is-hidden");
 });
 
 btnLegend?.addEventListener("click", () => {
   legend?.classList.toggle("is-hidden");
 });
 
-// About dialog wiring
 btnAbout?.addEventListener("click", () => {
-  if (aboutDialog?.showModal) aboutDialog.showModal();
+  aboutDialog?.showModal?.();
 });
-btnCloseAbout?.addEventListener("click", () => aboutDialog?.close());
-aboutDialog?.addEventListener("click", (e) => {
-  // click outside content closes
-  const rect = aboutDialog.getBoundingClientRect();
-  const inside =
-    e.clientX >= rect.left && e.clientX <= rect.right &&
-    e.clientY >= rect.top && e.clientY <= rect.bottom;
-  // dialog click fires anywhere; we only close if user clicked backdrop area.
-  if (!inside) aboutDialog.close();
-});
-
-// Tour
-btnTour?.addEventListener("click", () => {
-  if (tourTimer) stopTour();
-  else startTour();
-});
+btnCloseAbout?.addEventListener("click", () => aboutDialog?.close?.());
 
 // ===== الخريطة =====
 function initMapOnce() {
@@ -152,7 +159,6 @@ function initMapOnce() {
   loadGeoJSON();
 }
 
-// ===== تحميل GeoJSON =====
 function loadGeoJSON() {
   panel.innerHTML = `
     <div class="panel__empty">
@@ -167,31 +173,24 @@ function loadGeoJSON() {
       return r.json();
     })
     .then(geojson => {
-      buildingsData = (geojson && geojson.features) ? geojson.features : [];
+      buildingsData = geojson?.features || [];
 
-      // compute years range
+      // years
       const years = buildingsData.map(getYear).filter(v => v !== null);
       yearMin = years.length ? Math.min(...years) : null;
       yearMax = years.length ? Math.max(...years) : null;
       yearMaxSelected = yearMax;
 
-      rebuildLayers(geojson);
-
-      // زوم عام
+      buildGeoLayer(geojson);
       zoomToAll();
 
-      // ابنِ القائمة + البحث/الفلاتر
-      renderBuildingsList();
+      renderExplorePanel(); // البحث/الفلاتر/القائمة
 
-      // إذا في id بالـ URL افتحيه
-      const selectedId = parseUrlSelection();
-      if (selectedId) {
-        const f = buildingsData.find(x => getFeatureKey(x) === selectedId);
-        if (f) {
-          focusOnFeature(f, { zoom: 19, animate: true });
-          renderDetails(f);
-          highlightMarker(f);
-        }
+      // Load selection from URL
+      const selected = parseUrlSelection();
+      if (selected) {
+        const f = buildingsData.find(x => getFeatureKey(x) === selected);
+        if (f) selectFeature(f, true);
       }
     })
     .catch(err => {
@@ -200,16 +199,14 @@ function loadGeoJSON() {
         <div class="panel__empty">
           <h2>مشكلة في البيانات</h2>
           <p>تأكدي أن الملف <code>data/buildings.geojson</code> موجود وصحيح.</p>
-          <p class="smallNote">تفاصيل: ${escapeHtml(err.message || String(err))}</p>
+          <p class="smallNote">${escapeHtml(err.message || String(err))}</p>
         </div>
       `;
     });
 }
 
-function rebuildLayers(geojson) {
-  // remove old
+function buildGeoLayer(geojson) {
   if (geoLayer) geoLayer.remove();
-  if (clusterLayer) clusterLayer.remove();
   markerIndex.clear();
   highlighted = null;
 
@@ -222,102 +219,88 @@ function rebuildLayers(geojson) {
     fillOpacity: 0.9
   };
 
-  const highlightStyle = {
-    radius: 10,
-    fillColor: "#ffd27a",
-    color: "#000000",
-    weight: 2,
-    opacity: 1,
-    fillOpacity: 1
-  };
-
-  const makeLayer = () =>
-    L.geoJSON(geojson, {
-      // نقاط فقط في ملفك الحالي، لو لاحقاً صار Polygon بنغيّر بسهولة
-      pointToLayer: (feature, latlng) => L.circleMarker(latlng, styleForFeature(feature, baseStyle)),
-      onEachFeature: (feature, layer) => {
-        const key = getFeatureKey(feature);
-        markerIndex.set(key, layer);
-
-        layer.on("click", () => {
-          stopTour(); // أي تفاعل يدوي يوقف الجولة
-          focusOnFeature(feature, { zoom: 19, animate: true });
-          renderDetails(feature);
-          highlightMarker(feature, baseStyle, highlightStyle);
-          setUrlSelection(key);
-        });
-      }
-    });
-
-  geoLayer = makeLayer();
-
-  // Cluster only if library exists and count is "big"
-  const useCluster = (typeof L.markerClusterGroup === "function") && buildingsData.length >= 30;
-
-  if (useCluster) {
-    clusterLayer = L.markerClusterGroup({
-      showCoverageOnHover: false,
-      spiderfyOnMaxZoom: true,
-      disableClusteringAtZoom: 18
-    });
-    clusterLayer.addLayer(geoLayer);
-    clusterLayer.addTo(map);
-  } else {
-    geoLayer.addTo(map);
-  }
-}
-
-function styleForFeature(feature, baseStyle) {
-  // لون حسب الحالة (اختياري) — متوافق مع أسطورتك
-  const status = (feature?.properties?.status || "").toLowerCase();
-  if (status.includes("مهدد") || status.includes("خطر")) {
-    return { ...baseStyle, fillColor: "#e07a5f" };
-  }
-  if (status.includes("مرمم") || status.includes("تم ترميم")) {
-    return { ...baseStyle, fillColor: "#81b29a" };
-  }
-  return baseStyle;
+  geoLayer = L.geoJSON(geojson, {
+    pointToLayer: (feature, latlng) => {
+      const st = getStatus(feature);
+      if (st.includes("مهدد") || st.includes("خطر")) return L.circleMarker(latlng, { ...baseStyle, fillColor: "#e07a5f" });
+      if (st.includes("مرمم") || st.includes("تم ترميم")) return L.circleMarker(latlng, { ...baseStyle, fillColor: "#81b29a" });
+      return L.circleMarker(latlng, baseStyle);
+    },
+    onEachFeature: (feature, layer) => {
+      const key = getFeatureKey(feature);
+      markerIndex.set(key, layer);
+      layer.on("click", () => {
+        stopTour();
+        hideTourOverlay();
+        selectFeature(feature, true);
+      });
+    }
+  }).addTo(map);
 }
 
 function zoomToAll() {
-  const layer = clusterLayer || geoLayer;
-  if (!layer) return;
-
-  const b = layer.getBounds?.();
+  const b = geoLayer?.getBounds?.();
   if (b && b.isValid && b.isValid()) {
     map.fitBounds(b, { padding: [40, 40] });
   }
 }
 
-// ===== فلترة/فرز =====
+function focusOnFeature(feature, zoom = 19) {
+  const ll = latlngFromFeature(feature);
+  if (!ll) return;
+  map.flyTo(ll, zoom, { animate: true, duration: 1.2 });
+}
+
+// ===== اختيار مبنى =====
+function selectFeature(feature, updateUrl = false) {
+  focusOnFeature(feature, 19);
+  renderDetails(feature);
+  highlightMarker(feature);
+  if (updateUrl) setUrlSelection(getFeatureKey(feature));
+}
+
+// ===== هايلايت =====
+function highlightMarker(feature) {
+  const key = getFeatureKey(feature);
+  const layer = markerIndex.get(key);
+  if (!layer || !layer.setStyle) return;
+
+  // رجّع السابق طبيعي
+  if (highlighted && highlighted.setStyle) {
+    highlighted.setStyle({ radius: 7, weight: 1.5, opacity: 1, fillOpacity: 0.9 });
+  }
+
+  layer.setStyle({ radius: 10, weight: 2, opacity: 1, fillOpacity: 1 });
+  highlighted = layer;
+}
+
+// ===== Panel: Explore =====
+function uniqueSorted(arr) {
+  return Array.from(new Set(arr)).sort((a, b) => String(a).localeCompare(String(b), "ar"));
+}
+
 function getFilteredFeatures() {
   const q = currentQuery.trim().toLowerCase();
-
   let arr = buildingsData.filter(f => {
     const name = String(f?.properties?.name || "").toLowerCase();
-    const status = getStatus(f);
-    const style = getStyle(f);
+    const st = getStatus(f).toLowerCase();
+    const sty = getStyle(f).toLowerCase();
+    const era = getEra(f);
     const y = getYear(f);
 
-    const passQuery = q ? (name.includes(q) || String(status).toLowerCase().includes(q) || String(style).toLowerCase().includes(q)) : true;
-    const passStatus = (currentStatus === "all") ? true : (status === currentStatus);
-    const passStyle = (currentStyle === "all") ? true : (style === currentStyle);
+    const passQ = q ? (name.includes(q) || st.includes(q) || sty.includes(q) || String(era).toLowerCase().includes(q)) : true;
+    const passEra = (currentEra === "all") ? true : (era === currentEra);
     const passYear = (yearMaxSelected === null || y === null) ? true : (y <= yearMaxSelected);
 
-    return passQuery && passStatus && passStyle && passYear;
+    return passQ && passEra && passYear;
   });
 
-  // Sort
+  // sort
   arr.sort((a, b) => {
     if (currentSort === "year") {
-      const ya = getYear(a) ?? 999999;
-      const yb = getYear(b) ?? 999999;
-      return ya - yb;
+      return (getYear(a) ?? 999999) - (getYear(b) ?? 999999);
     }
-    // default name
-    const na = String(a?.properties?.name || "");
-    const nb = String(b?.properties?.name || "");
-    return na.localeCompare(nb, "ar");
+    return String(a?.properties?.name || "").localeCompare(String(b?.properties?.name || ""), "ar");
   });
 
   return arr;
@@ -325,60 +308,37 @@ function getFilteredFeatures() {
 
 function updateLayerVisibility() {
   const allowed = new Set(getFilteredFeatures().map(getFeatureKey));
-
   markerIndex.forEach((layer, key) => {
-    if (!layer) return;
-    const shouldShow = allowed.has(key);
-
-    // circleMarker supports setStyle; we can toggle by opacity
-    if (layer.setStyle) {
-      layer.setStyle({
-        opacity: shouldShow ? 1 : 0,
-        fillOpacity: shouldShow ? 0.9 : 0
-      });
-    }
+    if (!layer?.setStyle) return;
+    const show = allowed.has(key);
+    layer.setStyle({
+      opacity: show ? 1 : 0,
+      fillOpacity: show ? 0.9 : 0
+    });
   });
-
-  // if highlighted is now hidden, clear it
-  if (highlighted && highlighted.options && highlighted.options.opacity === 0) {
-    highlighted = null;
-  }
 }
 
-// ===== قائمة المباني + بحث + فلاتر =====
-function renderBuildingsList() {
-  // options
-  const statuses = Array.from(new Set(buildingsData.map(getStatus))).sort((a,b)=>a.localeCompare(b,"ar"));
-  const styles = Array.from(new Set(buildingsData.map(getStyle))).sort((a,b)=>a.localeCompare(b,"ar"));
+function renderExplorePanel() {
+  const eras = uniqueSorted(buildingsData.map(getEra));
 
   panel.innerHTML = `
-    <div style="display:flex; gap:10px; align-items:center; justify-content:space-between; margin-bottom:10px;">
-      <h2 style="margin:0;">المباني</h2>
-      <div class="smallNote">${buildingsData.length} عنصر</div>
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px;">
+      <h2 style="margin:0;">استكشف</h2>
+      <button id="btnZoomAll" class="btn btn--ghost btn--sm">عرض الكل</button>
     </div>
 
     <div class="controls">
-      <input id="searchBox" class="input" type="text" placeholder="ابحث (اسم/طراز/حالة)…" />
+      <input id="searchBox" class="input" type="text" placeholder="ابحث (اسم/عصر/طراز/حالة)…" />
 
       <div class="controls__row">
-        <select id="statusSel" class="select">
-          <option value="all">كل الحالات</option>
-          ${statuses.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("")}
+        <select id="eraSel" class="select">
+          <option value="all">كل العصور</option>
+          ${eras.map(e => `<option value="${escapeHtml(e)}">${escapeHtml(e)}</option>`).join("")}
         </select>
-
-        <select id="styleSel" class="select">
-          <option value="all">كل الطرز</option>
-          ${styles.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("")}
-        </select>
-      </div>
-
-      <div class="controls__row">
         <select id="sortSel" class="select">
           <option value="name">فرز: الاسم</option>
           <option value="year">فرز: السنة</option>
         </select>
-
-        <button id="btnZoomAll" class="btn btn--ghost btn--sm" style="width:100%;">عرض الكل</button>
       </div>
 
       ${yearMin !== null && yearMax !== null ? `
@@ -390,47 +350,34 @@ function renderBuildingsList() {
       ` : `<div class="smallNote">لا يوجد حقل سنة صالح في البيانات.</div>`}
     </div>
 
-    <div class="kpi">
-      <span class="pill">بحث: <span id="kQuery">-</span></span>
-      <span class="pill">تصفية: <span id="kFilter">-</span></span>
+    <div class="smallNote" style="margin:10px 0 8px;">
+      نصيحة للسائح: اضغط “الجولة” لتجربة متحفية تلقائية.
     </div>
 
     <div id="listBox" style="display:flex; flex-direction:column; gap:8px;"></div>
   `;
 
   const searchBox = document.getElementById("searchBox");
-  const statusSel = document.getElementById("statusSel");
-  const styleSel = document.getElementById("styleSel");
+  const eraSel = document.getElementById("eraSel");
   const sortSel = document.getElementById("sortSel");
   const yearRange = document.getElementById("yearRange");
   const yearVal = document.getElementById("yearVal");
   const listBox = document.getElementById("listBox");
-  const kQuery = document.getElementById("kQuery");
-  const kFilter = document.getElementById("kFilter");
 
-  function setKpis() {
-    kQuery.textContent = currentQuery ? currentQuery : "—";
-    const parts = [];
-    if (currentStatus !== "all") parts.push(`حالة: ${currentStatus}`);
-    if (currentStyle !== "all") parts.push(`طراز: ${currentStyle}`);
-    if (yearMaxSelected !== null && yearMax !== null && yearMaxSelected !== yearMax) parts.push(`حتى: ${yearMaxSelected}`);
-    kFilter.textContent = parts.length ? parts.join(" | ") : "—";
-  }
-
-  function drawList() {
-    const filtered = getFilteredFeatures();
-    setKpis();
+  const draw = () => {
+    const list = getFilteredFeatures();
     updateLayerVisibility();
 
-    if (filtered.length === 0) {
-      listBox.innerHTML = `<div style="opacity:.8">لا يوجد نتائج.</div>`;
+    if (!list.length) {
+      listBox.innerHTML = `<div class="smallNote">لا يوجد نتائج.</div>`;
       return;
     }
 
-    listBox.innerHTML = filtered.map((f) => {
+    listBox.innerHTML = list.map(f => {
       const p = f?.properties || {};
       const name = p.name || "مبنى بدون اسم";
-      const year = p.year || "";
+      const y = p.year || "—";
+      const era = getEra(f);
       const st = getStatus(f);
       const key = getFeatureKey(f);
       return `
@@ -438,9 +385,10 @@ function renderBuildingsList() {
           style="text-align:right; cursor:pointer; padding:10px 12px;
                  border:1px solid #333; border-radius:12px; background: rgba(255,255,255,.04);
                  color:#fff; font-family:inherit;">
-          <div style="font-weight:800;">${escapeHtml(name)}</div>
+          <div style="font-weight:900;">${escapeHtml(name)}</div>
           <div style="opacity:.78; font-size:12px; margin-top:3px; display:flex; gap:8px; flex-wrap:wrap;">
-            ${year ? `<span>سنة: ${escapeHtml(String(year))}</span>` : ``}
+            <span>سنة: ${escapeHtml(String(y))}</span>
+            <span>عصر: ${escapeHtml(String(era))}</span>
             <span>حالة: ${escapeHtml(String(st))}</span>
           </div>
         </button>
@@ -449,188 +397,352 @@ function renderBuildingsList() {
 
     listBox.querySelectorAll(".bItem").forEach(btn => {
       btn.addEventListener("click", () => {
-        stopTour();
+        stopTour(); hideTourOverlay();
         const key = btn.getAttribute("data-key");
-        const feature = buildingsData.find(f => getFeatureKey(f) === key);
-        if (!feature) return;
-
-        focusOnFeature(feature, { zoom: 19, animate: true });
-        renderDetails(feature);
-        highlightMarker(feature);
-        setUrlSelection(key);
+        const f = buildingsData.find(x => getFeatureKey(x) === key);
+        if (f) selectFeature(f, true);
       });
     });
-  }
+  };
 
-  drawList();
+  draw();
 
   searchBox.addEventListener("input", debounce((e) => {
     currentQuery = e.target.value || "";
-    drawList();
-  }, 160));
+    draw();
+  }, 140));
 
-  statusSel.addEventListener("change", (e) => {
-    currentStatus = e.target.value;
-    drawList();
-  });
-
-  styleSel.addEventListener("change", (e) => {
-    currentStyle = e.target.value;
-    drawList();
+  eraSel.addEventListener("change", (e) => {
+    currentEra = e.target.value;
+    draw();
   });
 
   sortSel.addEventListener("change", (e) => {
     currentSort = e.target.value;
-    drawList();
-  });
-
-  document.getElementById("btnZoomAll")?.addEventListener("click", () => {
-    stopTour();
-    zoomToAll();
+    draw();
   });
 
   if (yearRange) {
     yearRange.addEventListener("input", (e) => {
       yearMaxSelected = Number(e.target.value);
       if (yearVal) yearVal.textContent = String(yearMaxSelected);
-      drawList();
+      draw();
     });
   }
-}
 
-// ===== زوم قوي للمبنى =====
-function focusOnFeature(feature, opts = {}) {
-  const { zoom = 19, animate = true } = opts;
-  const coords = feature?.geometry?.coordinates;
-  if (!coords || coords.length < 2) return;
-
-  const lng = coords[0];
-  const lat = coords[1];
-
-  map.flyTo([lat, lng], zoom, {
-    animate,
-    duration: 1.15
+  document.getElementById("btnZoomAll")?.addEventListener("click", () => {
+    stopTour(); hideTourOverlay();
+    zoomToAll();
   });
 }
 
-// ===== تفاصيل المبنى (في نفس اللوحة) =====
+// ===== Details (متحف داخل اللوحة) =====
 function renderDetails(feature) {
   const p = feature?.properties || {};
+  const key = getFeatureKey(feature);
+
   const title = p.name || "مبنى";
   const year = p.year || "-";
+  const era = getEra(feature);
   const style = p.style || "-";
   const status = p.status || "-";
   const story = p.story || "لا يوجد وصف بعد.";
-  const img = p.image || "";
+
+  const imgMain = p.image || "./assets/placeholder.jpg";
   const link = p.link || "";
 
-  const key = getFeatureKey(feature);
+  // Gallery: array of strings
+  const gallery = Array.isArray(p.gallery) ? p.gallery : [];
+  const gallerySafe = gallery.length ? gallery : ["./assets/placeholder.jpg"];
 
-  const imgHtml = img
-    ? `<img src="${escapeHtml(img)}" alt="${escapeHtml(title)}"
-         style="width:100%; height:160px; object-fit:cover; border-radius:14px; margin-bottom:10px;" />`
-    : "";
+  // Before/After
+  const ba = p.beforeAfter || null;
+  const beforeImg = ba?.before || "";
+  const afterImg = ba?.after || "";
 
-  const linkHtml = link
-    ? `<a href="${escapeHtml(link)}" target="_blank" rel="noopener"
-         style="display:inline-block; margin-top:10px; padding:8px 12px; border-radius:999px;
-                background: #c8a86a; color:#111; font-weight:800; text-decoration:none;">
-         مصدر / المزيد
-       </a>`
-    : "";
+  // Audio
+  const audio = p.audio || "";
 
   panel.innerHTML = `
     <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px;">
-      <h2 style="margin:0;">${escapeHtml(title)}</h2>
-      <button id="backToList"
-        style="cursor:pointer; padding:8px 10px; border-radius:12px; border:1px solid #333;
-               background: rgba(255,255,255,.04); color:#fff; font-family:inherit;">
-        ← رجوع
-      </button>
+      <h2 class="cardTitle">${escapeHtml(title)}</h2>
+      <button id="backToExplore" class="btn btn--ghost btn--sm">← رجوع</button>
     </div>
 
-    ${imgHtml}
+    <img class="cardImg" src="${escapeHtml(imgMain)}" alt="${escapeHtml(title)}" />
 
-    <div style="display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 12px;">
+    <div class="metaRow">
       <span class="pill">سنة: ${escapeHtml(String(year))}</span>
+      <span class="pill">عصر: ${escapeHtml(String(era))}</span>
       <span class="pill">طراز: ${escapeHtml(String(style))}</span>
       <span class="pill">حالة: ${escapeHtml(String(status))}</span>
     </div>
 
-    <p style="line-height:1.9; opacity:.9; margin:0;">${escapeHtml(String(story))}</p>
+    <p class="cardText">${escapeHtml(String(story))}</p>
 
-    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;">
-      ${linkHtml}
-      <button id="btnCopyLink" class="btn btn--ghost btn--sm" style="border-radius:999px;">
-        نسخ رابط هذا المبنى
-      </button>
+    ${audio ? `
+      <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+        <button id="btnPlayAudio" class="btn btn--primary btn--sm">🔊 استمع للقصة</button>
+        <button id="btnStopAudio" class="btn btn--ghost btn--sm">⏹ إيقاف</button>
+      </div>
+      <p class="smallNote">* الصوت بدون موسيقى، مرشد هادئ.</p>
+    ` : `
+      <p class="smallNote" style="margin-top:12px;">لا يوجد ملف صوتي لهذا المبنى بعد. (أضيفي <code>audio</code> داخل GeoJSON)</p>
+    `}
+
+    ${link ? `
+      <a href="${escapeHtml(link)}" target="_blank" rel="noopener"
+        class="btn btn--primary btn--sm" style="display:inline-block; margin-top:10px; text-decoration:none;">
+        مصدر / المزيد
+      </a>
+    ` : ``}
+
+    <!-- Before/After -->
+    ${beforeImg && afterImg ? `
+      <div class="ba">
+        <div class="ba__wrap">
+          <img src="${escapeHtml(beforeImg)}" alt="قبل" />
+          <img id="afterImg" class="ba__after" src="${escapeHtml(afterImg)}" alt="بعد" />
+          <div class="ba__label before">قبل</div>
+          <div class="ba__label after">بعد</div>
+        </div>
+        <div class="ba__range">
+          <input id="baRange" type="range" min="0" max="100" value="50" />
+        </div>
+      </div>
+    ` : `
+      <p class="smallNote" style="margin-top:12px;">ميزة “قبل/بعد” غير مفعّلة هنا. (أضيفي <code>beforeAfter.before</code> و <code>beforeAfter.after</code>)</p>
+    `}
+
+    <!-- Gallery -->
+    <div class="gallery">
+      <div class="gallery__main">
+        <img id="gMain" src="${escapeHtml(gallerySafe[0])}" alt="Gallery" />
+      </div>
+
+      <div class="gallery__nav">
+        <button id="gPrev" class="btn btn--ghost btn--sm">◀</button>
+        <div class="smallNote" style="align-self:center;">معرض الصور</div>
+        <button id="gNext" class="btn btn--ghost btn--sm">▶</button>
+      </div>
+
+      <div class="gallery__thumbs" id="gThumbs">
+        ${gallerySafe.map((src, i) => `
+          <img data-i="${i}" class="${i===0 ? "active" : ""}" src="${escapeHtml(src)}" alt="thumb" />
+        `).join("")}
+      </div>
     </div>
 
-    <p class="smallNote" style="margin-top:10px;">معرّف: <code style="opacity:.85;">${escapeHtml(String(key))}</code></p>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
+      <button id="btnCopyLink" class="btn btn--ghost btn--sm">نسخ رابط المبنى</button>
+      <button id="btnStartTourFromHere" class="btn btn--ghost btn--sm">ابدأ الجولة من هنا</button>
+    </div>
+
+    <p class="smallNote" style="margin-top:10px;">ID: <code>${escapeHtml(key)}</code></p>
   `;
 
-  document.getElementById("backToList")?.addEventListener("click", () => {
-    renderBuildingsList();
+  // Back
+  document.getElementById("backToExplore")?.addEventListener("click", () => {
+    renderExplorePanel();
   });
 
+  // Copy link
   document.getElementById("btnCopyLink")?.addEventListener("click", async () => {
-    try{
+    try {
       setUrlSelection(key);
       await navigator.clipboard.writeText(window.location.href);
-      const btn = document.getElementById("btnCopyLink");
-      if (btn) btn.textContent = "تم النسخ ✅";
-      setTimeout(() => { const b = document.getElementById("btnCopyLink"); if (b) b.textContent = "نسخ رابط هذا المبنى"; }, 900);
-    }catch(e){
-      alert("لم أستطع نسخ الرابط. انسخي الرابط يدويًا من شريط العنوان.");
+      alert("تم نسخ رابط المبنى ✅");
+    } catch {
+      alert("لم أستطع النسخ. انسخي الرابط من شريط العنوان.");
     }
   });
-}
 
-// ===== هايلايت نقطة على الخريطة =====
-function highlightMarker(feature, baseStyle, highlightStyle) {
-  const base = baseStyle || {
-    radius: 7, fillColor: "#c8a86a", color: "#fff", weight: 1.5, opacity: 1, fillOpacity: 0.9
-  };
-  const hi = highlightStyle || {
-    radius: 10, fillColor: "#ffd27a", color: "#000", weight: 2, opacity: 1, fillOpacity: 1
-  };
+  // Start tour from this
+  document.getElementById("btnStartTourFromHere")?.addEventListener("click", () => {
+    openTourOverlay();
+    buildTourList();
+    const idx = tourList.findIndex(x => getFeatureKey(x) === key);
+    tourIndex = idx >= 0 ? idx : 0;
+    showTourItem(tourIndex, true);
+  });
 
-  // رجّع السابق لوضعه الطبيعي
-  if (highlighted && highlighted.setStyle) highlighted.setStyle(base);
+  // Before/After slider
+  const baRange = document.getElementById("baRange");
+  const afterEl = document.getElementById("afterImg");
+  if (baRange && afterEl) {
+    const apply = () => {
+      const v = Number(baRange.value); // 0..100
+      // clip-path inset(top right bottom left) — left = v%
+      afterEl.style.clipPath = `inset(0 0 0 ${v}%)`;
+    };
+    baRange.addEventListener("input", apply);
+    apply();
+  }
 
-  const key = getFeatureKey(feature);
-  const layer = markerIndex.get(key);
-  if (layer && layer.setStyle) {
-    layer.setStyle(hi);
-    highlighted = layer;
+  // Gallery logic
+  let gi = 0;
+  const gMain = document.getElementById("gMain");
+  const gThumbs = document.getElementById("gThumbs");
+  function setGallery(i) {
+    gi = (i + gallerySafe.length) % gallerySafe.length;
+    if (gMain) gMain.src = gallerySafe[gi];
+    gThumbs?.querySelectorAll("img").forEach(img => img.classList.remove("active"));
+    gThumbs?.querySelector(`img[data-i="${gi}"]`)?.classList.add("active");
+  }
+  document.getElementById("gPrev")?.addEventListener("click", () => setGallery(gi - 1));
+  document.getElementById("gNext")?.addEventListener("click", () => setGallery(gi + 1));
+  gThumbs?.querySelectorAll("img").forEach(img => {
+    img.addEventListener("click", () => setGallery(Number(img.getAttribute("data-i"))));
+  });
+
+  // Audio
+  const btnPlayAudio = document.getElementById("btnPlayAudio");
+  const btnStopAudio = document.getElementById("btnStopAudio");
+  if (audio && btnPlayAudio && btnStopAudio) {
+    btnPlayAudio.addEventListener("click", () => {
+      try{
+        narrator.pause();
+        narrator.currentTime = 0;
+        narrator.src = audio;
+        narrator.play();
+      }catch(e){
+        alert("تعذر تشغيل الصوت. تأكدي من وجود الملف داخل مجلد audio/");
+      }
+    });
+    btnStopAudio.addEventListener("click", () => {
+      narrator.pause();
+      narrator.currentTime = 0;
+    });
   }
 }
 
-// ===== الجولة (Story Tour) =====
-function startTour() {
-  const list = getFilteredFeatures();
-  if (!list.length) return;
+// ===== TOUR (مشغل متحفي) =====
+btnTour?.addEventListener("click", () => {
+  if (tourOverlay.classList.contains("is-hidden")) {
+    openTourOverlay();
+    buildTourList();
+    tourIndex = 0;
+    showTourItem(tourIndex, true);
+  } else {
+    // toggle play
+    if (tourPlaying) stopTour();
+    else startTour();
+  }
+});
 
+btnCloseTour?.addEventListener("click", () => {
+  stopTour();
+  hideTourOverlay();
+});
+
+btnPrev?.addEventListener("click", () => {
+  stopTour();
+  showTourItem(tourIndex - 1, true);
+});
+
+btnNext?.addEventListener("click", () => {
+  stopTour();
+  showTourItem(tourIndex + 1, true);
+});
+
+btnPlay?.addEventListener("click", () => {
+  if (tourPlaying) stopTour();
+  else startTour();
+});
+
+function openTourOverlay() {
+  tourOverlay.classList.remove("is-hidden");
   btnTour.textContent = "إيقاف الجولة";
-  tourIndex = 0;
+}
 
-  const step = () => {
-    const f = list[tourIndex % list.length];
-    tourIndex += 1;
-    const key = getFeatureKey(f);
-    focusOnFeature(f, { zoom: 19, animate: true });
-    renderDetails(f);
-    highlightMarker(f);
-    setUrlSelection(key);
-  };
+function hideTourOverlay() {
+  tourOverlay.classList.add("is-hidden");
+  btnTour.textContent = "الجولة";
+}
 
-  step();
-  tourTimer = setInterval(step, 3500);
+function buildTourList() {
+  tourList = getFilteredFeatures();
+  if (!tourList.length) tourList = buildingsData.slice();
+}
+
+function showTourItem(index, focus = false) {
+  if (!tourList.length) return;
+
+  tourIndex = (index + tourList.length) % tourList.length;
+  const f = tourList[tourIndex];
+  const p = f?.properties || {};
+
+  const name = p.name || "مبنى";
+  const era = getEra(f);
+  const story = p.story || "لا يوجد وصف بعد.";
+  const progress = Math.round(((tourIndex + 1) / tourList.length) * 100);
+
+  tourCounter.textContent = `محطة ${tourIndex + 1} من ${tourList.length}`;
+  tourEra.textContent = `العصر: ${era}`;
+  tourName.textContent = name;
+  tourStory.textContent = story;
+  tourBar.style.width = `${progress}%`;
+
+  if (focus) {
+    selectFeature(f, true);
+  }
+
+  // Auto play audio if exists (اختياري)
+  const audio = p.audio || "";
+  if (audio) {
+    try{
+      narrator.pause();
+      narrator.currentTime = 0;
+      narrator.src = audio;
+      narrator.play().catch(()=>{});
+    }catch{}
+  }
+}
+
+function startTour() {
+  if (!tourList.length) buildTourList();
+  tourPlaying = true;
+  btnPlay.textContent = "إيقاف";
+  btnTour.textContent = "إيقاف الجولة";
+
+  // move every 4 seconds
+  tourTimer = setInterval(() => {
+    showTourItem(tourIndex + 1, true);
+  }, 4000);
 }
 
 function stopTour() {
-  if (!tourTimer) return;
-  clearInterval(tourTimer);
+  tourPlaying = false;
+  btnPlay.textContent = "تشغيل";
+  if (tourTimer) clearInterval(tourTimer);
   tourTimer = null;
-  btnTour.textContent = "الجولة";
 }
+
+// ===== WALKING ROUTE =====
+btnRoute?.addEventListener("click", () => {
+  // toggle route
+  if (routeLine) {
+    map.removeLayer(routeLine);
+    routeLine = null;
+    btnRoute.textContent = "المسار";
+    return;
+  }
+
+  // build route from filtered list in order (by year or name)
+  const list = getFilteredFeatures();
+  const coords = list.map(latlngFromFeature).filter(Boolean);
+
+  if (coords.length < 2) {
+    alert("لا يوجد نقاط كافية لرسم مسار.");
+    return;
+  }
+
+  routeLine = L.polyline(coords, {
+    color: "#6aaed6",
+    weight: 5,
+    opacity: 0.9
+  }).addTo(map);
+
+  map.fitBounds(routeLine.getBounds(), { padding: [40, 40] });
+  btnRoute.textContent = "إخفاء المسار";
+});
